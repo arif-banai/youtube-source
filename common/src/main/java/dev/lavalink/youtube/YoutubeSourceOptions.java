@@ -9,6 +9,7 @@ public class YoutubeSourceOptions {
     private String remoteCipherUrl;
     private String remoteCipherPassword;
     private String remoteCipherUserAgent;
+    private String debugSaveResponsesDirectory;
 
     public boolean isAllowSearch() {
         return allowSearch;
@@ -57,5 +58,13 @@ public class YoutubeSourceOptions {
         return remoteCipherUserAgent;
     }
 
+    @Nullable
+    public String getDebugSaveResponsesDirectory() {
+        return debugSaveResponsesDirectory;
+    }
 
+    public YoutubeSourceOptions setDebugSaveResponsesDirectory(@Nullable String debugSaveResponsesDirectory) {
+        this.debugSaveResponsesDirectory = debugSaveResponsesDirectory;
+        return this;
+    }
 }

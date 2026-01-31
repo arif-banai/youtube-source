@@ -33,3 +33,4 @@ build
 
 application.yml
 playerconfigs/*
+gradle.properties

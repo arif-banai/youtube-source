@@ -160,6 +160,11 @@ public class YoutubeAudioSourceManager implements AudioSourceManager {
         } else {
             this.cipherManager = new LocalSignatureCipherManager();
         }
+
+        if (!DataFormatTools.isNullOrEmpty(options.getDebugSaveResponsesDirectory())) {
+            contextFilter.setDebugSaveResponsesDirectory(options.getDebugSaveResponsesDirectory());
+            log.info("Debug response saving enabled, writing to: {}", options.getDebugSaveResponsesDirectory());
+        }
     }
 
     @Override

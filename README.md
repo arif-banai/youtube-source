@@ -20,6 +20,8 @@ Which clients are used is entirely configurable.
   - Information on using a `poToken` with `youtube-source`.
 - [Using a remote cipher server](#using-a-remote-cipher-server)
   - Information on using a remote cipher server with `youtube-source`.
+- [Debugging / Saving raw responses](#debugging--saving-raw-responses)
+  - Information on saving HTTP request/response data for debugging.
 - [REST Routes (`plugin` only)](#rest-routes-plugin-only)
   - Information on the REST routes provided by the `youtube-source` plugin module.
 - [Migration Information](#migration-from-lavaplayers-built-in-youtube-source)
@@ -195,6 +197,7 @@ Currently, the following clients are available for use:
 | `ANDROID_VR`      | Yes          | No    | No                      | Yes + Livestream | Video, Search, Playlist, Mix |                                                      |
 | `IOS`             | No           | No    | No                      | Yes + Livestream | Video, Search, Playlist, Mix |                                                      |
 | `TV`              | Yes          | Yes   | With OAuth              | Yes + Livestream | None                         | Playback requires sign-in                            |
+| `TVHTML5EMBEDDED` | No          | Yes   | With OAuth              | No | Video, Search, Mix           | Playback no longer works, loading does.                             |
 
 > [!NOTE]
 > Clients that do not return Opus formats will require transcoding.
@@ -326,6 +329,24 @@ plugins:
       url: "http://localhost:8001" # The base URL of your remote cipher server.
       password: "your_secret_password" # The password to authenticate with your remote cipher server.
       userAgent: "your_service_name" # Optional user-agent header, used for metrics on the backend. 
+```
+
+## Debugging / Saving raw responses
+
+When troubleshooting playback issues (e.g. OAuth problems, stream decoding errors), it can be helpful to capture the HTTP request and response.
+
+### Lavaplayer
+```java
+YoutubeSourceOptions options = new YoutubeSourceOptions()
+    .setDebugSaveResponsesDirectory("/path/to/debug/output");
+YoutubeAudioSourceManager sourceManager = new YoutubeAudioSourceManager(options, ...);
+```
+
+### Lavalink
+```yaml
+plugins:
+  youtube:
+    debugSaveResponsesDirectory: "/path/to/debug/output"
 ```
 
 ## REST routes (`plugin` only)
