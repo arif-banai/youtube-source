@@ -19,6 +19,7 @@ public class YoutubeConfig {
     private String[] clients;
     private Map<String, ClientOptions> clientOptions = new HashMap<>();
     private YoutubeOauthConfig oauth = null;
+    private String debugSaveResponsesDirectory = null;
 
     public boolean getEnabled() {
         return enabled;
@@ -92,4 +93,11 @@ public class YoutubeConfig {
         this.remoteCipher = remoteCipher;
     }
 
+    public String getDebugSaveResponsesDirectory() {
+        return debugSaveResponsesDirectory;
+    }
+
+    public void setDebugSaveResponsesDirectory(String debugSaveResponsesDirectory) {
+        this.debugSaveResponsesDirectory = debugSaveResponsesDirectory;
+    }
 }

@@ -333,7 +333,7 @@ public class YoutubeOauth2Handler {
 
         // check again to ensure updating worked as expected.
         if (accessToken != null && tokenType != null && System.currentTimeMillis() < tokenExpires) {
-            log.debug("Using oauth authorization header with value \"{} {}\"", tokenType, accessToken);
+            log.debug("Applying OAuth authorization header ({} token, length={})", tokenType, accessToken != null ? accessToken.length() : 0);
             request.setHeader("Authorization", String.format("%s %s", tokenType, accessToken));
         }
     }
