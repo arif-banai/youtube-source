@@ -3,6 +3,7 @@ package dev.lavalink.youtube;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.source.AudioSourceManager;
 import com.sedmelluq.discord.lavaplayer.tools.DataFormatTools;
+import com.sedmelluq.discord.lavaplayer.tools.io.HttpConfigurable;
 import com.sedmelluq.discord.lavaplayer.tools.ExceptionTools;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException.Severity;
@@ -39,12 +40,17 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.impl.client.HttpClientBuilder;
 
 import static com.sedmelluq.discord.lavaplayer.tools.FriendlyException.Severity.SUSPICIOUS;
 
 @SuppressWarnings("RegExpUnnecessaryNonCapturingGroup")
-public class YoutubeAudioSourceManager implements AudioSourceManager {
+public class YoutubeAudioSourceManager implements AudioSourceManager, HttpConfigurable {
     // TODO: connect timeout = 16000ms, read timeout = 8000ms (as observed from scraped youtube config)
     // TODO: look at possibly scraping jsUrl from WEB config to save a request
     // TODO(music): scrape config? it's identical to WEB.
@@ -457,6 +463,16 @@ public class YoutubeAudioSourceManager implements AudioSourceManager {
     @NotNull
     public HttpInterface getInterface() {
         return httpInterfaceManager.getInterface();
+    }
+
+    @Override
+    public void configureRequests(Function<RequestConfig, RequestConfig> configurator) {
+        httpInterfaceManager.configureRequests(configurator);
+    }
+
+    @Override
+    public void configureBuilder(Consumer<HttpClientBuilder> configurator) {
+        httpInterfaceManager.configureBuilder(configurator);
     }
 
     @Override

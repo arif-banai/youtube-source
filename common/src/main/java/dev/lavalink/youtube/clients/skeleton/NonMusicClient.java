@@ -12,13 +12,10 @@ import dev.lavalink.youtube.cipher.CipherManager;
 import dev.lavalink.youtube.cipher.CipherManager.CachedPlayerScript;
 import dev.lavalink.youtube.clients.ClientConfig;
 import dev.lavalink.youtube.track.TemporalInfo;
-import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -133,7 +130,7 @@ public abstract class NonMusicClient implements Client {
 
         // For embedded clients, fetch and include encryptedHostFlags to avoid playback restrictions.
         if (isEmbedded()) {
-            String encryptedHostFlags = fetchEncryptedHostFlags(videoId);
+            String encryptedHostFlags = fetchEncryptedHostFlags(httpInterface, videoId);
             if (encryptedHostFlags != null) {
                 config.withEncryptedHostFlags(encryptedHostFlags);
             }
@@ -212,26 +209,29 @@ public abstract class NonMusicClient implements Client {
     /**
      * Fetches the encryptedHostFlags from the YouTube embed page.
      * This is required for embedded clients to avoid playback restrictions.
+     * Uses the given HttpInterface so proxy and other HTTP config (e.g. from the player manager) are applied.
      *
+     * @param httpInterface The HTTP interface to use (respects proxy and builder configurator).
      * @param videoId The video ID to fetch the embed page for.
      * @return The encryptedHostFlags value, or null if not found.
      */
     @Nullable
-    protected String fetchEncryptedHostFlags(@NotNull String videoId) {
+    protected String fetchEncryptedHostFlags(@NotNull HttpInterface httpInterface, @NotNull String videoId) {
         String embedUrl = "https://www.youtube.com/embed/" + videoId;
 
-        try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+        try {
             HttpGet request = new HttpGet(embedUrl);
             request.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
-            HttpResponse response = httpClient.execute(request);
-            String html = EntityUtils.toString(response.getEntity());
+            try (CloseableHttpResponse response = httpInterface.execute(request)) {
+                String html = EntityUtils.toString(response.getEntity());
 
-            Pattern pattern = Pattern.compile("\"encryptedHostFlags\":\"([^\"]+)\"");
-            Matcher matcher = pattern.matcher(html);
+                Pattern pattern = Pattern.compile("\"encryptedHostFlags\":\"([^\"]+)\"");
+                Matcher matcher = pattern.matcher(html);
 
-            if (matcher.find()) {
-                return matcher.group(1);
+                if (matcher.find()) {
+                    return matcher.group(1);
+                }
             }
         } catch (IOException e) {
             log.debug("Failed to fetch encryptedHostFlags for video {}", videoId, e);
