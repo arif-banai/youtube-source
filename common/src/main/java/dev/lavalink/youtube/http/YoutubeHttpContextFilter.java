@@ -39,7 +39,8 @@ public class YoutubeHttpContextFilter extends BaseYoutubeHttpContextFilter {
   public static final String ATTRIBUTE_CIPHER_REQUEST_SPECIFIED = "remoteCipherRequest";
 
   // Context attributes for debug saving
-  private static final String ATTRIBUTE_DEBUG_REQUEST_INFO = "debugRequestInfo";
+  private static final String ATTRIBUTE_DEBUG_REQUEST_INFO_REDACTED = "debugRequestInfoRedacted";
+  private static final String ATTRIBUTE_DEBUG_REQUEST_INFO_RAW = "debugRequestInfoRaw";
 
   // Sensitive query params to redact
   private static final Pattern SENSITIVE_QUERY_PARAMS = Pattern.compile(
@@ -172,8 +173,9 @@ public class YoutubeHttpContextFilter extends BaseYoutubeHttpContextFilter {
       String host = request.getURI().getHost();
       if (host != null && (host.contains("youtubei.googleapis.com") || host.contains("googlevideo"))) {
         try {
-          String requestInfo = captureRequestInfo(request);
-          context.setAttribute(ATTRIBUTE_DEBUG_REQUEST_INFO, requestInfo);
+          String[] requestInfo = captureRequestInfo(request);
+          context.setAttribute(ATTRIBUTE_DEBUG_REQUEST_INFO_REDACTED, requestInfo[0]);
+          context.setAttribute(ATTRIBUTE_DEBUG_REQUEST_INFO_RAW, requestInfo[1]);
         } catch (Exception e) {
           log.warn("Failed to capture request info for debug saving", e);
         }
@@ -242,24 +244,38 @@ public class YoutubeHttpContextFilter extends BaseYoutubeHttpContextFilter {
     return false;
   }
 
-  private String captureRequestInfo(HttpUriRequest request) throws IOException {
-    StringBuilder sb = new StringBuilder();
+  /**
+   * Captures request info for debug saving, building both redacted and raw versions in a single pass.
+   * @return String array: [0] = redacted, [1] = raw
+   */
+  private String[] captureRequestInfo(HttpUriRequest request) throws IOException {
+    StringBuilder redacted = new StringBuilder();
+    StringBuilder raw = new StringBuilder();
 
-    // Method and URI (redacted)
+    // Method and URI
     String method = request.getMethod();
+    String uriRaw = request.getURI().toString();
     String uriRedacted = redactUri(request.getURI());
-    sb.append(method).append(" ").append(uriRedacted).append("\n");
 
-    // Headers (redacted)
+    redacted.append(method).append(" ").append(uriRedacted).append("\n");
+    raw.append(method).append(" ").append(uriRaw).append("\n");
+
+    // Headers
     for (Header header : request.getAllHeaders()) {
       String name = header.getName();
       String value = header.getValue();
+
+      raw.append(name).append(": ").append(value).append("\n");
+
       if ("Authorization".equalsIgnoreCase(name)) {
-        value = "***REDACTED***";
+        redacted.append(name).append(": ***REDACTED***\n");
+      } else {
+        redacted.append(name).append(": ").append(value).append("\n");
       }
-      sb.append(name).append(": ").append(value).append("\n");
     }
-    sb.append("\n");
+
+    redacted.append("\n");
+    raw.append("\n");
 
     // Request body (if repeatable)
     if (request instanceof HttpEntityEnclosingRequest) {
@@ -269,18 +285,22 @@ public class YoutubeHttpContextFilter extends BaseYoutubeHttpContextFilter {
         try {
           byte[] bodyBytes = EntityUtils.toByteArray(entity);
           String bodyStr = new String(bodyBytes, StandardCharsets.UTF_8);
-          // Redact sensitive JSON fields
-          bodyStr = redactJsonFields(bodyStr);
-          sb.append(bodyStr);
+
+          raw.append(bodyStr);
+          redacted.append(redactJsonFields(bodyStr));
         } catch (Exception e) {
-          sb.append("[Request body could not be read: ").append(e.getMessage()).append("]");
+          String err = "[Request body could not be read: " + e.getMessage() + "]";
+          redacted.append(err);
+          raw.append(err);
         }
       } else if (entity != null) {
-        sb.append("[Request body not repeatable, skipped]");
+        String msg = "[Request body not repeatable, skipped]";
+        redacted.append(msg);
+        raw.append(msg);
       }
     }
 
-    return sb.toString();
+    return new String[] { redacted.toString(), raw.toString() };
   }
 
   private String redactUri(URI uri) {
@@ -292,17 +312,28 @@ public class YoutubeHttpContextFilter extends BaseYoutubeHttpContextFilter {
     return SENSITIVE_JSON_FIELDS.matcher(json).replaceAll("$1\"***REDACTED***\"");
   }
 
-  private String redactHeaders(Header[] headers) {
-    StringBuilder sb = new StringBuilder();
+  /**
+   * Formats headers, building both redacted and raw versions in a single pass.
+   * @return String array: [0] = redacted, [1] = raw
+   */
+  private String[] formatHeaders(Header[] headers) {
+    StringBuilder redacted = new StringBuilder();
+    StringBuilder raw = new StringBuilder();
+
     for (Header header : headers) {
       String name = header.getName();
       String value = header.getValue();
+
+      raw.append(name).append(": ").append(value).append("\n");
+
       if ("Authorization".equalsIgnoreCase(name)) {
-        value = "***REDACTED***";
+        redacted.append(name).append(": ***REDACTED***\n");
+      } else {
+        redacted.append(name).append(": ").append(value).append("\n");
       }
-      sb.append(name).append(": ").append(value).append("\n");
     }
-    return sb.toString();
+
+    return new String[] { redacted.toString(), raw.toString() };
   }
 
   private void saveDebugFiles(HttpClientContext context,
@@ -316,23 +347,36 @@ public class YoutubeHttpContextFilter extends BaseYoutubeHttpContextFilter {
     long counter = debugFileCounter.incrementAndGet();
     String prefix = String.format(Locale.ROOT, "%s_%d_%d_%d", hostPrefix, timestamp, status, counter);
 
-    Path dir = Path.of(debugSaveResponsesDirectory);
-    Files.createDirectories(dir);
+    Path baseDir = Path.of(debugSaveResponsesDirectory);
+    Path redactedDir = baseDir.resolve("redacted");
+    Path rawDir = baseDir.resolve("raw");
+    Files.createDirectories(redactedDir);
+    Files.createDirectories(rawDir);
 
-    // Write request file
-    String requestInfo = context.getAttribute(ATTRIBUTE_DEBUG_REQUEST_INFO, String.class);
-    if (requestInfo != null) {
-      Path requestFile = dir.resolve(prefix + "_request.txt");
-      Files.writeString(requestFile, requestInfo, StandardCharsets.UTF_8);
+    // Write request files (both versions)
+    String requestRedacted = context.getAttribute(ATTRIBUTE_DEBUG_REQUEST_INFO_REDACTED, String.class);
+    String requestRaw = context.getAttribute(ATTRIBUTE_DEBUG_REQUEST_INFO_RAW, String.class);
+
+    if (requestRedacted != null) {
+      Files.writeString(redactedDir.resolve(prefix + "_request.txt"), requestRedacted, StandardCharsets.UTF_8);
+    }
+    if (requestRaw != null) {
+      Files.writeString(rawDir.resolve(prefix + "_request.txt"), requestRaw, StandardCharsets.UTF_8);
     }
 
-    // Read response body
+    // Read response body once
     HttpEntity entity = response.getEntity();
     byte[] responseBody = null;
     if (entity != null) {
       responseBody = EntityUtils.toByteArray(entity);
       response.setEntity(new ByteArrayEntity(responseBody));
     }
+
+    // Format headers once (both versions)
+    String[] headers = formatHeaders(response.getAllHeaders());
+    String headersRedacted = headers[0];
+    String headersRaw = headers[1];
+    String statusLine = response.getStatusLine().toString();
 
     // Determine content type
     String contentType = response.getFirstHeader("Content-Type") != null
@@ -343,35 +387,30 @@ public class YoutubeHttpContextFilter extends BaseYoutubeHttpContextFilter {
 
     if (isGooglevideo && !isTextResponse) {
       // Binary response: write meta file + body file separately
-      StringBuilder meta = new StringBuilder();
-      meta.append(response.getStatusLine().toString()).append("\n");
-      meta.append(redactHeaders(response.getAllHeaders()));
+      String metaRedacted = statusLine + "\n" + headersRedacted;
+      String metaRaw = statusLine + "\n" + headersRaw;
 
-      Path metaFile = dir.resolve(prefix + "_response_meta.txt");
-      Files.writeString(metaFile, meta.toString(), StandardCharsets.UTF_8);
+      Files.writeString(redactedDir.resolve(prefix + "_response_meta.txt"), metaRedacted, StandardCharsets.UTF_8);
+      Files.writeString(rawDir.resolve(prefix + "_response_meta.txt"), metaRaw, StandardCharsets.UTF_8);
 
       if (responseBody != null) {
         String ext = contentType.contains("html") ? ".html" : ".bin";
-        Path bodyFile = dir.resolve(prefix + "_response_body" + ext);
-        Files.write(bodyFile, responseBody);
+        // Binary body is the same for both (no redaction needed for binary)
+        Files.write(redactedDir.resolve(prefix + "_response_body" + ext), responseBody);
+        Files.write(rawDir.resolve(prefix + "_response_body" + ext), responseBody);
       }
     } else {
       // Text response: write single response file with status, headers, and body
-      StringBuilder responseContent = new StringBuilder();
-      responseContent.append(response.getStatusLine().toString()).append("\n");
-      responseContent.append(redactHeaders(response.getAllHeaders()));
-      responseContent.append("\n");
-
-      if (responseBody != null) {
-        String bodyStr = new String(responseBody, StandardCharsets.UTF_8);
-        // Redact sensitive JSON fields
-        bodyStr = redactJsonFields(bodyStr);
-        responseContent.append(bodyStr);
-      }
+      String bodyRaw = responseBody != null ? new String(responseBody, StandardCharsets.UTF_8) : "";
+      String bodyRedacted = redactJsonFields(bodyRaw);
 
       String ext = contentType.contains("html") ? ".html" : ".txt";
-      Path responseFile = dir.resolve(prefix + "_response" + ext);
-      Files.writeString(responseFile, responseContent.toString(), StandardCharsets.UTF_8);
+
+      String responseRedacted = statusLine + "\n" + headersRedacted + "\n" + bodyRedacted;
+      String responseRaw = statusLine + "\n" + headersRaw + "\n" + bodyRaw;
+
+      Files.writeString(redactedDir.resolve(prefix + "_response" + ext), responseRedacted, StandardCharsets.UTF_8);
+      Files.writeString(rawDir.resolve(prefix + "_response" + ext), responseRaw, StandardCharsets.UTF_8);
     }
   }
 
