@@ -184,6 +184,12 @@ public class YoutubePluginLoader implements AudioPlayerManagerConfiguration {
                 log.info("Using remote cipher server with URL \"{}\"", cipherConfig.getUrl());
                 sourceOptions.setRemoteCipher(cipherConfig.getUrl(), cipherConfig.getPassword(), cipherConfig.getUserAgent());
             }
+
+            String debugSaveDir = youtubeConfig.getDebugSaveResponsesDirectory();
+            if (debugSaveDir != null && !debugSaveDir.isEmpty()) {
+                log.info("Debug response saving enabled, directory: \"{}\"", debugSaveDir);
+                sourceOptions.setDebugSaveResponsesDirectory(debugSaveDir);
+            }
         }
 
         final YoutubeAudioSourceManager source = new YoutubeAudioSourceManager(sourceOptions, clients);
